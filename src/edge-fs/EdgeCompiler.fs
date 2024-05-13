@@ -3,76 +3,58 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Reflection
-open System.Text
 open System.Text.RegularExpressions
 open System.Threading.Tasks
-open System.Security
-open System.Security.Permissions
-open Microsoft.FSharp.Build
-open Microsoft.Build.Framework
-open Microsoft.Build.Tasks
-open Microsoft.Build.Utilities
- 
-type EdgeCompiler() =
+open System.Diagnostics
 
+type EdgeCompiler() =
+    
     let referencesRegex = new Regex(@"\/\/\#r\s+""[^""]+""\s*", RegexOptions.Multiline)
     let referenceRegex = new Regex(@"\/\/\#r\s+""([^""]+)""\s*")
     let debuggingEnabled = not <| String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_FS_DEBUG"))
-    
+    let tools = Environment.GetEnvironmentVariable("EDGE_FS_TOOLS")
+   
     let writeSourceToDisk source =
         let path = Path.GetTempPath()
-        let fileName = Path.GetRandomFileName() 
+        let mutable fileName = Path.GetRandomFileName() 
         let fileNameEx = Path.ChangeExtension(fileName, ".fs")
         let fullName = Path.Combine(path, fileNameEx)
         File.WriteAllText(fullName, source)
         fullName
-      
-    let tryCompile(source, references) =
+    
+    let tryCompileCmd(source, references) =
         let fileName = writeSourceToDisk source
-
-        let (emptyBuildEngine, errors) = 
-           let errors = StringBuilder()
-           { new IBuildEngine3 with
-               member b.BuildProjectFilesInParallel(projectFileNames, targetNames, globalProperties, removeGlobalProperties, toolsVersion, returnTargetOutputs) = BuildEngineResult()
-               member b.Reacquire() = ()
-               member b.Yield() = ()
-               member b.BuildProjectFile(projectFileName, targetNames, globalProperties, targetOutputs, toolsVersion) = true
-               member b.BuildProjectFilesInParallel(projectFileNames, targetNames, globalProperties, targetOutputsPerProject, toolsVersion, useResultsCache, unloadProjectsOnCompletion) = false
-               member b.IsRunningMultipleNodes with get() = true
-               member b.BuildProjectFile(projectFileName, targetNames, globalProperties, targetOutputs) = true
-               member b.ColumnNumberOfTaskNode with get() = 1
-               member b.ContinueOnError with get() = true
-               member b.LineNumberOfTaskNode with get() = 0
-               member b.LogCustomEvent(e) =()
-               member b.LogErrorEvent(e) = errors.AppendLine(e.Message ) |> ignore
-               member b.LogMessageEvent(e) =()
-               member b.LogWarningEvent(e) =()
-               member b.ProjectFileOfTaskNode with get() = String.Empty}, errors
-             
-        let fsc = Fsc(BuildEngine = emptyBuildEngine,
-                      Sources = [|Microsoft.Build.Utilities.TaskItem(fileName)|],
-                      References = (references |> Seq.map (fun x -> TaskItem(x:String) :> ITaskItem) |> Seq.toArray), 
-                      TargetType = "library",
-                      NoFramework = true,
-                      OutputAssembly = Path.ChangeExtension(fileName, "dll"),
-                      Optimize = not debuggingEnabled,
-                      Tailcalls = not debuggingEnabled)
-        let assembly = 
-            if fsc.Execute() = false then None else
-                use fs = new FileStream(fsc.OutputAssembly, FileMode.Open, FileAccess.Read, FileShare.Delete)
-                let count = int32 fs.Length 
-                if (count <= 0) then None else
-                    let buffer = Array.zeroCreate count
-                    fs.Read(buffer, 0, count) |> ignore
-                    (SecurityPermission(SecurityPermissionFlag.ControlEvidence)).Assert()
-                    try Some(Assembly.Load(buffer))
-                    finally CodeAccessPermission.RevertAssert()
-                            File.Delete fileName
-                            File.Delete fsc.OutputAssembly
-        fsc.ExitCode, errors.ToString(), assembly
+       
+        let outputAssemblyName = Path.ChangeExtension(fileName, "dll")
         
+        let processInfo = ProcessStartInfo($"{tools}\\fsc.exe", $"-a {fileName} -o {outputAssemblyName} --target:library")
+        processInfo.WorkingDirectory <- tools
+        processInfo.CreateNoWindow <- true;
+        processInfo.UseShellExecute <- false;
+        // *** Redirect output ***
+        processInfo.RedirectStandardError <- true;
+        processInfo.RedirectStandardOutput <- true;
+        let proc = Process.Start(processInfo)
+        proc.WaitForExit()
+        let error = proc.StandardError.ReadToEnd();
+        let exitCode = proc.ExitCode
+        
+        let assembly = 
+            if exitCode <> 0 then None else
+                try Some(Assembly.UnsafeLoadFrom(outputAssemblyName))
+                with
+                | _ -> (None)
+
+        try
+            File.Delete fileName
+            File.Delete outputAssemblyName
+        with
+        | _ -> ()
+            
+        exitCode, error, assembly
+       
     let getReferences (parameters:IDictionary<string, Object>) source=
-        // add assembly references provided explicitly through parameters
+    // add assembly references provided explicitly through parameters
         let passed = match parameters.TryGetValue("references")  with
                      | true, v -> seq {for item in unbox v do yield unbox item}
                      | _ -> Seq.empty
@@ -97,28 +79,30 @@ type EdgeCompiler() =
             if String.IsNullOrEmpty(file) then String.Empty
             else String.Format("#line {0} \"{1}\"\n", lineNumber, fileName)
         else String.Empty
-
+            
     let tryGetAssembly lineDirective source references islambda =
         // try to compile source code as a library
         if islambda then     
             let lsource = "namespace global\n"
                           + "open System\n"
+                          + "open System.Runtime\n"
                           + "type Startup() =\n"
                           + "    member x.Invoke(input: obj) =\n"
                           + lineDirective
                           + "        async {let! result = input |> (" + source + ")\n"
                           + "               return result :> obj } |> Async.StartAsTask"
     
-            let result, errors, assembly = tryCompile(lsource, references)
+            
+            let result, errors, assembly = tryCompileCmd(lsource, references)
+
             if result = 0 then assembly else
                 invalidOp <| "Unable to compile F# code.\n----> Errors when compiling as a CLR async lambda expression:\n" + errors
                          
-        else let result, errors, assembly = tryCompile(lineDirective + source, references)
+        else let result, errors, assembly = tryCompileCmd(lineDirective + source, references)
              if result = 0 then assembly 
-             else invalidOp <| "Unable to compile F# code.\n----> Errors when compiling as a CLR library:\n" + errors
+                else invalidOp <| "Unable to compile F# code.\n----> Errors when compiling as a CLR library:\n" + errors
           
     member x.CompileFunc( parameters: IDictionary<string, Object>) =
-        // read source from file
         let source, isLambda, fileName = 
             match parameters.["source"] :?> String with
             | input when input.EndsWith(".fs", StringComparison.InvariantCultureIgnoreCase) 
@@ -128,12 +112,21 @@ type EdgeCompiler() =
         
         let references = getReferences parameters source
         let lineDirective = getLineDirective parameters fileName
+        
+        let typeName = match parameters.TryGetValue("typeName") with
+                       | true, (:? String as typeName) -> typeName
+                       | _ -> "Startup"
+                       
+        let methodName = match parameters.TryGetValue("methodName") with
+                         | true, (:? String as methodName) -> methodName
+                         | _ -> "Invoke"
             
         // extract the entry point to a class method
         match tryGetAssembly lineDirective source references isLambda with
-        | Some assembly -> let startupType = assembly.GetType( parameters.["typeName"] :?> String, true, true)
+        | Some assembly -> let startupType = assembly.GetType( typeName, true, true)
                            let instance = Activator.CreateInstance(startupType, false)
-                           match startupType.GetMethod(parameters.["methodName"] :?> String, BindingFlags.Instance ||| BindingFlags.Public) with
+                           
+                           match startupType.GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.Public) with
                            | null -> invalidOp "Unable to access CLR method to wrap via reflection. Make sure it is a public instance method."
                            | invokeMethod -> // create a Func<object,Task<object>> around the method invocation using reflection
                                              Func<_,_> (fun (input:obj) -> (invokeMethod.Invoke(instance, [| input |])) :?> Task<obj> )

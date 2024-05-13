@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <RootNamespace>edge_fs_coreclr</RootNamespace>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <AssemblyName>edge-fs-coreclr</AssemblyName>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="EdgeCompiler.fs" />
+        <Compile Include="AssemblyInfo.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FSharp.Compiler.Service" Version="41.0.7" />
+      <PackageReference Update="FSharp.Core" Version="6.0.7" />
+    </ItemGroup>
+
+</Project>

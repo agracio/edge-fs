@@ -5,7 +5,7 @@
     "url": "http://7sharpnine.com",
     "twitter": "7sharp9"
   },
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Edge-fs: run F# and node.js code in-process with edge.js",
   "tags": [
     "edge",
@@ -20,21 +20,17 @@
   ],
   "main": "./lib/edge-fs.js",
   "engines": {
-    "node": ">= 0.6"
+    "node": ">= 16"
   },
-  "licenses": [
-    {
-      "type": "Apache",
-      "url": "http://www.apache.org/licenses/LICENSE-2.0"
-    }
-  ],
+  "license": "MIT",
   "dependencies": {},
-  "homepage": "http://tjanczuk.github.com/edge",
-  "repository": {
-    "type": "git",
-    "url": "git@github.com:7sharp9/edge-fs.git"
-  },
-  "bugs": {
-    "url": "http://github.com/7sharp9/edge-fs/issues"
-  }
+	"homepage": "https://github.com/agracio/edge-fs",
+	"repository": {
+		"type": "git",
+		"url": "git@github.com:agracio/edge-fs.git"
+	},
+	"bugs": {
+		"url": "http://github.com/agracio/edge-fs/issues"
+	}
+
 }

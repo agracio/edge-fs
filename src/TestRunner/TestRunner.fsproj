@@ -1,62 +1,37 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>10.0.0</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{8E59E242-0BFD-45AE-B285-5DA86BB91590}</ProjectGuid>
-    <OutputType>Exe</OutputType>
-    <RootNamespace>runner</RootNamespace>
-    <AssemblyName>runner</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <OutputPath>bin\Debug</OutputPath>
-    <DefineConstants>DEBUG</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <PlatformTarget>x86</PlatformTarget>
-    <Externalconsole>true</Externalconsole>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release</OutputPath>
-    <ErrorReport>prompt</ErrorReport>
-    <PlatformTarget>x86</PlatformTarget>
-    <Externalconsole>true</Externalconsole>
-    <Tailcalls>true</Tailcalls>
-    <DefineConstants />
-  </PropertyGroup>
-  <PropertyGroup>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-  </PropertyGroup>
-  <Import Project="$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets" Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')" />
-  <Import Project="$(MSBuildExtensionsPath32)\..\Microsoft F#\v4.0\Microsoft.FSharp.Targets" Condition="(!Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')) And (Exists('$(MSBuildExtensionsPath32)\..\Microsoft F#\v4.0\Microsoft.FSharp.Targets'))" />
-  <Import Project="$(MSBuildExtensionsPath32)\FSharp\1.0\Microsoft.FSharp.Targets" Condition="(!Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')) And (!Exists('$(MSBuildExtensionsPath32)\..\Microsoft F#\v4.0\Microsoft.FSharp.Targets')) And (Exists('$(MSBuildExtensionsPath32)\FSharp\1.0\Microsoft.FSharp.Targets'))" />
-  <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Program.fs" />
-    <None Include="addSeven.fs" />
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="nunit.framework">
-      <HintPath>..\packages\NUnit.2.6.2\lib\nunit.framework.dll</HintPath>
-    </Reference>
-    <Reference Include="FsUnit.NUnit">
-      <HintPath>..\packages\FsUnit.1.1.1.0\lib\Net40\FsUnit.NUnit.dll</HintPath>
-    </Reference>
-    <ProjectReference Include="..\edge-fs\edge-fs.fsproj">
-      <Project>{E65DDBEB-0876-4053-859D-A9FD143A8805}</Project>
-      <Name>edge-fs</Name>
-    </ProjectReference>
-  </ItemGroup>
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+<PropertyGroup>
+  <TargetFramework>net462</TargetFramework>
+  <RootNamespace>runner</RootNamespace>
+  <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  <AssemblyName>runner</AssemblyName>
+  <OutputType>Exe</OutputType>
+</PropertyGroup>
+
+<PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+  <PlatformTarget>AnyCPU</PlatformTarget>
+</PropertyGroup>
+
+<PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+  <PlatformTarget>AnyCPU</PlatformTarget>
+</PropertyGroup>
+
+<ItemGroup>
+  <None Include="addSeven.fs" CopyToOutputDirectory="PreserveNewest" />
+  <Compile Include="AssemblyInfo.fs" />
+  <Compile Include="Program.fs" />
+</ItemGroup>
+
+<ItemGroup>
+  <PackageReference Include="FsUnit" Version="3.0.0" />
+  <PackageReference Include="nunit.framework" Version="2.6.2" />
+  <PackageReference Update="FSharp.Core" Version="6.0.7" />
+
+
+</ItemGroup>
+
+<ItemGroup>
+  <ProjectReference Include="..\edge-fs\edge-fs.fsproj" />
+</ItemGroup>
+
 </Project>

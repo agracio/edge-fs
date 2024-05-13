@@ -18,7 +18,7 @@ let [<Test>] ``Compiler with .fs file test``() =
     let ec = EdgeCompiler()    
     let parameters = dict ["typeName", "Startup" :> obj
                            "methodName", "Invoke" :> obj                          
-                           "source", "../../addSeven.fs" :> obj]
+                           "source", "addSeven.fs" :> obj]
     let norman = ec.CompileFunc parameters
     let result = norman.Invoke(3)
     result.Wait()
