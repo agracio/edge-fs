@@ -5,8 +5,6 @@ open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
 open System.Threading.Tasks
-open System.Security
-open System.Security.Permissions
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Diagnostics
 
@@ -15,6 +13,7 @@ type EdgeCompiler() =
     let referencesRegex = new Regex(@"\/\/\#r\s+""[^""]+""\s*", RegexOptions.Multiline)
     let referenceRegex = new Regex(@"\/\/\#r\s+""([^""]+)""\s*")
     let debuggingEnabled = not <| String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_FS_DEBUG"))
+    let tools = Environment.GetEnvironmentVariable("EDGE_FS_TOOLS")
 
     let writeSourceToDisk source =
         let path = Path.GetTempPath()
@@ -44,16 +43,11 @@ type EdgeCompiler() =
             
         let assembly = 
             if exitCode <> 0 then None else
-                use fs = new FileStream(outputAssemblyName, FileMode.Open, FileAccess.Read, FileShare.Delete)
-                let count = int fs.Length 
-                if (count <= 0) then None else
-                    let buffer = Array.zeroCreate count
-                    fs.Read(buffer, 0, count) |> ignore
-                    (SecurityPermission(SecurityPermissionFlag.ControlEvidence)).Assert()
-                    try Some(Assembly.Load(buffer))
-                    finally CodeAccessPermission.RevertAssert()
-                            File.Delete fileName
-                            File.Delete outputAssemblyName    
+                try
+                    Some(Assembly.Load(File.ReadAllBytes(outputAssemblyName)))
+                finally 
+                        File.Delete fileName
+                        File.Delete outputAssemblyName    
         
         exitCode, errors, assembly
         

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Update="FSharp.Core" Version="6.0.7" />
+    <PackageReference Include="System.Runtime.Loader" Version="4.3.0" />
   </ItemGroup>
 
 

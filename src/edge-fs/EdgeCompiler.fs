@@ -13,7 +13,23 @@ type EdgeCompiler() =
     let referenceRegex = new Regex(@"\/\/\#r\s+""([^""]+)""\s*")
     let debuggingEnabled = not <| String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_FS_DEBUG"))
     let tools = Environment.GetEnvironmentVariable("EDGE_FS_TOOLS")
+    let referencedAssemblies = Dictionary<string, Assembly>()
+    
+    let debugMessage (message: string, parameters: obj[]) =
+        if debuggingEnabled then
+            Console.WriteLine(message, parameters)
+    
+    let currentDomain_AssemblyResolve (sender: obj) (args: ResolveEventArgs) : Assembly =
+        debugMessage("EDGE_FS_COMPILER currentDomain_AssemblyResolve (.NET) - Resolving assembly \n{0}", [|args.Name|])
+        debugMessage("EDGE_FS_COMPILER currentDomain_AssemblyResolve (.NET) - Requested by assembly \n{0}", [|args.RequestingAssembly.FullName|])
+        if referencedAssemblies.ContainsKey(args.Name) then
+            referencedAssemblies.[args.Name]
+        else
+            null
    
+    let addResolver () =
+        AppDomain.CurrentDomain.add_AssemblyResolve currentDomain_AssemblyResolve
+        
     let writeSourceToDisk source =
         let path = Path.GetTempPath()
         let mutable fileName = Path.GetRandomFileName() 
@@ -41,15 +57,11 @@ type EdgeCompiler() =
         
         let assembly = 
             if exitCode <> 0 then None else
-                try Some(Assembly.UnsafeLoadFrom(outputAssemblyName))
-                with
-                | _ -> (None)
-
-        try
-            File.Delete fileName
-            File.Delete outputAssemblyName
-        with
-        | _ -> ()
+                try
+                    Some(Assembly.Load(File.ReadAllBytes(outputAssemblyName)))
+                finally
+                    File.Delete fileName
+                    File.Delete outputAssemblyName
             
         exitCode, error, assembly
        
@@ -66,21 +78,8 @@ type EdgeCompiler() =
                                yield referenceMatch.Groups.[1].Value }
         seq{ yield! passed
              yield! enc}
-
-    let getLineDirective (parameters:IDictionary<string, Object>) fileName= 
-        if (debuggingEnabled) then
-            let file = match parameters.TryGetValue("jsFileName") with
-                       | true, (:? String as jsFileName) -> jsFileName
-                       | _ -> fileName
-                       
-            let lineNumber = match parameters.TryGetValue("jsLineNumber") with
-                             | true, (:? int as number) -> number
-                             | _ -> 0
-            if String.IsNullOrEmpty(file) then String.Empty
-            else String.Format("#line {0} \"{1}\"\n", lineNumber, fileName)
-        else String.Empty
-            
-    let tryGetAssembly lineDirective source references islambda =
+           
+    let tryGetAssembly source references islambda =
         // try to compile source code as a library
         if islambda then     
             let lsource = "namespace global\n"
@@ -88,7 +87,6 @@ type EdgeCompiler() =
                           + "open System.Runtime\n"
                           + "type Startup() =\n"
                           + "    member x.Invoke(input: obj) =\n"
-                          + lineDirective
                           + "        async {let! result = input |> (" + source + ")\n"
                           + "               return result :> obj } |> Async.StartAsTask"
     
@@ -98,7 +96,7 @@ type EdgeCompiler() =
             if result = 0 then assembly else
                 invalidOp <| "Unable to compile F# code.\n----> Errors when compiling as a CLR async lambda expression:\n" + errors
                          
-        else let result, errors, assembly = tryCompileCmd(lineDirective + source, references)
+        else let result, errors, assembly = tryCompileCmd(source, references)
              if result = 0 then assembly 
                 else invalidOp <| "Unable to compile F# code.\n----> Errors when compiling as a CLR library:\n" + errors
           
@@ -111,7 +109,6 @@ type EdgeCompiler() =
             | input -> input, true, String.Empty
         
         let references = getReferences parameters source
-        let lineDirective = getLineDirective parameters fileName
         
         let typeName = match parameters.TryGetValue("typeName") with
                        | true, (:? String as typeName) -> typeName
@@ -120,14 +117,18 @@ type EdgeCompiler() =
         let methodName = match parameters.TryGetValue("methodName") with
                          | true, (:? String as methodName) -> methodName
                          | _ -> "Invoke"
-            
+        
+        addResolver()
+                 
+        referencedAssemblies.Add("FSharp.Core, Version=4.5.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", Assembly.LoadFrom(Path.Combine(tools, "FSharp.Core.dll")))    
         // extract the entry point to a class method
-        match tryGetAssembly lineDirective source references isLambda with
-        | Some assembly -> let startupType = assembly.GetType( typeName, true, true)
+        match tryGetAssembly source references isLambda with
+        | Some assembly ->
+                           let startupType = assembly.GetType( typeName, true, true)
                            let instance = Activator.CreateInstance(startupType, false)
                            
                            match startupType.GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.Public) with
                            | null -> invalidOp "Unable to access CLR method to wrap via reflection. Make sure it is a public instance method."
                            | invokeMethod -> // create a Func<object,Task<object>> around the method invocation using reflection
-                                             Func<_,_> (fun (input:obj) -> (invokeMethod.Invoke(instance, [| input |])) :?> Task<obj> )
+                                Func<_,_> (fun (input:obj) -> (invokeMethod.Invoke(instance, [| input |])) :?> Task<obj> )
         | None -> invalidOp "Unable to build Dynamic Assembly, no assembly output."
